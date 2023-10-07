@@ -1,5 +1,8 @@
-use protocol::{self, LE, ReadBytes, ReadBytesExt, ReadFromBytes, SizeBytes, WriteBytes,
-               WriteBytesExt, WriteToBytes};
+use byteorder::LittleEndian;
+use protocol::{
+    self, ReadBytes, ReadBytesExt, ReadFromBytes, SizeBytes, WriteBytes, WriteBytesExt,
+    WriteToBytes, LE,
+};
 use std::ffi::CString;
 use std::{io, mem};
 
@@ -118,6 +121,25 @@ impl WriteToBytes for PLoc {
     }
 }
 
+impl ReadFromBytes for Header {
+    fn read_from_bytes<R: ReadBytesExt>(mut reader: R) -> io::Result<Self> {
+        let header = Header {
+            citp_header: reader.read_bytes()?,
+            content_type: reader.read_u32::<LittleEndian>()?,
+        };
+        Ok(header)
+    }
+}
+impl ReadFromBytes for Message<PLoc> {
+    fn read_from_bytes<R: ReadBytesExt>(mut reader: R) -> io::Result<Self> {
+        let msg = Message::<PLoc> {
+            pinf_header: reader.read_bytes()?,
+            message: reader.read_bytes::<PLoc>()?,
+        };
+        return Ok(msg);
+    }
+}
+
 impl ReadFromBytes for PNam {
     fn read_from_bytes<R: ReadBytesExt>(mut reader: R) -> io::Result<Self> {
         let name = reader.read_bytes()?;
@@ -132,7 +154,12 @@ impl ReadFromBytes for PLoc {
         let kind = reader.read_bytes()?;
         let name = reader.read_bytes()?;
         let state = reader.read_bytes()?;
-        let ploc = PLoc { listening_tcp_port, kind, name, state };
+        let ploc = PLoc {
+            listening_tcp_port,
+            kind,
+            name,
+            state,
+        };
         Ok(ploc)
     }
 }
@@ -146,8 +173,30 @@ impl SizeBytes for PNam {
 impl SizeBytes for PLoc {
     fn size_bytes(&self) -> usize {
         mem::size_of::<u16>()
-        + self.kind.size_bytes()
-        + self.name.size_bytes()
-        + self.state.size_bytes()
+            + self.kind.size_bytes()
+            + self.name.size_bytes()
+            + self.state.size_bytes()
     }
+}
+
+#[test]
+fn test_ploc_message_read_bytes() {
+    let ploc_packet: [u8; 96] = [
+        0x43, 0x49, 0x54, 0x50, 0x01, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+        0x00, 0x50, 0x49, 0x4e, 0x46, 0x50, 0x4c, 0x6f, 0x63, 0x4a, 0xfa, 0x56, 0x69, 0x73, 0x75,
+        0x61, 0x6c, 0x69, 0x7a, 0x65, 0x72, 0x00, 0x43, 0x61, 0x70, 0x74, 0x75, 0x72, 0x65, 0x20,
+        0x40, 0x20, 0x48, 0x75, 0x67, 0x6f, 0x73, 0x2d, 0x4d, 0x61, 0x63, 0x42, 0x6f, 0x6f, 0x6b,
+        0x2d, 0x50, 0x72, 0x6f, 0x2e, 0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x20, 0x28, 0x31, 0x39, 0x32,
+        0x2e, 0x31, 0x36, 0x38, 0x2e, 0x31, 0x36, 0x38, 0x2e, 0x38, 0x30, 0x29, 0x00, 0x52, 0x75,
+        0x6e, 0x6e, 0x69, 0x6e, 0x67, 0x00,
+    ];
+    let buffer = ploc_packet.to_vec();
+
+    let citp_header = buffer.as_slice().read_bytes::<Message<PLoc>>();
+
+    assert!(citp_header.is_ok());
+    assert_eq!(
+        citp_header.unwrap().pinf_header.content_type.to_le_bytes(),
+        *b"PLoc"
+    );
 }

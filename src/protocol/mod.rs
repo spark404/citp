@@ -28,10 +28,11 @@
 //! - Read the header for the second layer.
 //! - Match on the `content_type` field of the second layer to determine what type to read.
 
-pub use byteorder::{LE, ReadBytesExt, WriteBytesExt};
 use std::ffi::CString;
-use std::{fmt, io, mem};
 use std::hash::{Hash, Hasher};
+use std::{fmt, io, mem};
+
+pub use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 
 /// ## CITP/PINF - Peer Information Layer
 ///
@@ -241,9 +242,7 @@ pub union Kind {
 
 impl WriteToBytes for Kind {
     fn write_to_bytes<W: WriteBytesExt>(&self, mut writer: W) -> io::Result<()> {
-        unsafe {
-            writer.write_u16::<LE>(self.request_index)
-        }
+        unsafe { writer.write_u16::<LE>(self.request_index) }
     }
 }
 
@@ -338,9 +337,7 @@ impl ReadFromBytes for CString {
                 byte => bytes.push(byte),
             }
         }
-        let cstring = unsafe {
-            CString::from_vec_unchecked(bytes)
-        };
+        let cstring = unsafe { CString::from_vec_unchecked(bytes) };
         Ok(cstring)
     }
 }
@@ -377,9 +374,7 @@ impl SizeBytes for Header {
 
 impl fmt::Debug for Kind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        unsafe {
-            write!(f, "{:?}", self.request_index)
-        }
+        unsafe { write!(f, "{:?}", self.request_index) }
     }
 }
 
@@ -387,9 +382,7 @@ impl Eq for Kind {}
 
 impl PartialEq for Kind {
     fn eq(&self, other: &Self) -> bool {
-        unsafe {
-            self.request_index == other.request_index
-        }
+        unsafe { self.request_index == other.request_index }
     }
 }
 
@@ -424,4 +417,23 @@ where
     let mut vec = Vec::with_capacity(len);
     read_vec(reader, len, &mut vec)?;
     Ok(vec)
+}
+
+#[test]
+fn test_citp_header_read_bytes() {
+    let ploc_packet: [u8; 96] = [
+        0x43, 0x49, 0x54, 0x50, 0x01, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
+        0x00, 0x50, 0x49, 0x4e, 0x46, 0x50, 0x4c, 0x6f, 0x63, 0x4a, 0xfa, 0x56, 0x69, 0x73, 0x75,
+        0x61, 0x6c, 0x69, 0x7a, 0x65, 0x72, 0x00, 0x43, 0x61, 0x70, 0x74, 0x75, 0x72, 0x65, 0x20,
+        0x40, 0x20, 0x48, 0x75, 0x67, 0x6f, 0x73, 0x2d, 0x4d, 0x61, 0x63, 0x42, 0x6f, 0x6f, 0x6b,
+        0x2d, 0x50, 0x72, 0x6f, 0x2e, 0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x20, 0x28, 0x31, 0x39, 0x32,
+        0x2e, 0x31, 0x36, 0x38, 0x2e, 0x31, 0x36, 0x38, 0x2e, 0x38, 0x30, 0x29, 0x00, 0x52, 0x75,
+        0x6e, 0x6e, 0x69, 0x6e, 0x67, 0x00,
+    ];
+    let buffer = ploc_packet.to_vec();
+
+    let citp_header: io::Result<Header> = buffer.as_slice().read_bytes::<Header>();
+
+    assert!(citp_header.is_ok());
+    assert_eq!(citp_header.unwrap().cookie.to_le_bytes(), *b"CITP");
 }
