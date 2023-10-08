@@ -425,7 +425,7 @@ impl Header {
 }
 
 impl Kind {
-    fn default() -> Self {
+    pub fn default() -> Self {
         return Kind { request_index: 0 };
     }
 }
