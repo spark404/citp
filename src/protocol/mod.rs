@@ -28,10 +28,12 @@
 //! - Read the header for the second layer.
 //! - Match on the `content_type` field of the second layer to determine what type to read.
 
-pub use byteorder::{LE, ReadBytesExt, WriteBytesExt};
-use std::ffi::CString;
 use std::{fmt, io, mem};
+use std::ffi::CString;
 use std::hash::{Hash, Hasher};
+
+pub use byteorder::{LE, ReadBytesExt, WriteBytesExt};
+use byteorder::LittleEndian;
 
 /// ## CITP/PINF - Peer Information Layer
 ///
@@ -183,13 +185,13 @@ pub trait ReadBytes {
 /// Protocol types that may be written to little endian bytes.
 pub trait WriteToBytes {
     /// Write the command to bytes.
-    fn write_to_bytes<W: WriteBytesExt>(&self, W) -> io::Result<()>;
+    fn write_to_bytes<W: WriteBytesExt>(&self, _: W) -> io::Result<()>;
 }
 
 /// Protocol types that may be read from little endian bytes.
 pub trait ReadFromBytes: Sized {
     /// Read the command from bytes.
-    fn read_from_bytes<R: ReadBytesExt>(R) -> io::Result<Self>;
+    fn read_from_bytes<R: ReadBytesExt>(_: R) -> io::Result<Self>;
 }
 
 /// Types that have a constant size when written to or read from bytes.
@@ -235,15 +237,13 @@ pub struct Header {
 #[derive(Copy, Clone)]
 #[repr(C)]
 pub union Kind {
-    request_index: u16,
-    in_response_to: u16,
+    pub request_index: u16,
+    pub in_response_to: u16,
 }
 
 impl WriteToBytes for Kind {
     fn write_to_bytes<W: WriteBytesExt>(&self, mut writer: W) -> io::Result<()> {
-        unsafe {
-            writer.write_u16::<LE>(self.request_index)
-        }
+        unsafe { writer.write_u16::<LE>(self.request_index) }
     }
 }
 
@@ -293,8 +293,8 @@ impl ReadFromBytes for Header {
 }
 
 impl<W> WriteBytes for W
-where
-    W: WriteBytesExt,
+    where
+        W: WriteBytesExt,
 {
     fn write_bytes<P: WriteToBytes>(&mut self, protocol: P) -> io::Result<()> {
         protocol.write_to_bytes(self)
@@ -302,8 +302,8 @@ where
 }
 
 impl<R> ReadBytes for R
-where
-    R: ReadBytesExt,
+    where
+        R: ReadBytesExt,
 {
     fn read_bytes<P: ReadFromBytes>(&mut self) -> io::Result<P> {
         P::read_from_bytes(self)
@@ -311,8 +311,8 @@ where
 }
 
 impl<'a, T> WriteToBytes for &'a T
-where
-    T: WriteToBytes,
+    where
+        T: WriteToBytes,
 {
     fn write_to_bytes<W: WriteBytesExt>(&self, writer: W) -> io::Result<()> {
         (**self).write_to_bytes(writer)
@@ -338,9 +338,7 @@ impl ReadFromBytes for CString {
                 byte => bytes.push(byte),
             }
         }
-        let cstring = unsafe {
-            CString::from_vec_unchecked(bytes)
-        };
+        let cstring = unsafe { CString::from_vec_unchecked(bytes) };
         Ok(cstring)
     }
 }
@@ -377,9 +375,7 @@ impl SizeBytes for Header {
 
 impl fmt::Debug for Kind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        unsafe {
-            write!(f, "{:?}", self.request_index)
-        }
+        unsafe { write!(f, "{:?}", self.request_index) }
     }
 }
 
@@ -387,9 +383,7 @@ impl Eq for Kind {}
 
 impl PartialEq for Kind {
     fn eq(&self, other: &Self) -> bool {
-        unsafe {
-            self.request_index == other.request_index
-        }
+        unsafe { self.request_index == other.request_index }
     }
 }
 
@@ -403,9 +397,9 @@ impl Hash for Kind {
 
 /// Read **len** elements of type **T** into the given **vec**.
 pub fn read_vec<R, T>(mut reader: R, mut len: usize, vec: &mut Vec<T>) -> io::Result<()>
-where
-    R: ReadBytesExt,
-    T: ReadFromBytes,
+    where
+        R: ReadBytesExt,
+        T: ReadFromBytes,
 {
     while len > 0 {
         let elem = reader.read_bytes()?;
@@ -417,11 +411,62 @@ where
 
 /// Read **len** elements of type **T** into a new **Vec**.
 pub fn read_new_vec<R, T>(reader: R, len: usize) -> io::Result<Vec<T>>
-where
-    R: ReadBytesExt,
-    T: ReadFromBytes,
+    where
+        R: ReadBytesExt,
+        T: ReadFromBytes,
 {
     let mut vec = Vec::with_capacity(len);
     read_vec(reader, len, &mut vec)?;
     Ok(vec)
+}
+
+impl Header {
+    pub const COOKIE: &'static [u8; 4] = b"CITP";
+}
+
+impl Kind {
+    fn default() -> Self {
+        return Kind { request_index: 0 };
+    }
+}
+
+#[test]
+fn test_citp_header_read_bytes() {
+    let ploc_packet: [u8; 20] = [
+        0x43, 0x49, 0x54, 0x50, 0x01, 0x00, 0x00, 0x00,
+        0x60, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+        0x50, 0x49, 0x4e, 0x46,
+    ];
+    let buffer = ploc_packet.to_vec();
+
+    let citp_header: io::Result<Header> = buffer.as_slice().read_bytes::<Header>();
+
+    assert!(citp_header.is_ok());
+    assert_eq!(citp_header.unwrap().cookie.to_le_bytes(), *Header::COOKIE);
+}
+
+#[test]
+fn test_citp_header_write_bytes() {
+    let citp_header = Header {
+        cookie: Header::COOKIE.as_slice().read_u32::<LittleEndian>().unwrap(),
+        version_major: 1,
+        version_minor: 0,
+        kind: Kind::default(),
+        message_size: 96,
+        message_part_count: 1,
+        message_part: 0,
+        content_type: b"PINF".as_slice().read_u32::<LittleEndian>().unwrap(),
+    };
+
+    let mut vec = vec!();
+    let result = vec.write_bytes(citp_header);
+
+    let expected: [u8; 20] = [
+        0x43, 0x49, 0x54, 0x50, 0x01, 0x00, 0x00, 0x00,
+        0x60, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+        0x50, 0x49, 0x4e, 0x46,
+    ];
+
+    assert!(result.is_ok());
+    assert_eq!(vec.as_slice(), expected);
 }
