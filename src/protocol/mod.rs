@@ -33,6 +33,7 @@ use std::hash::{Hash, Hasher};
 use std::{fmt, io, mem};
 
 pub use byteorder::{ReadBytesExt, WriteBytesExt, LE};
+use byteorder::LittleEndian;
 
 /// ## CITP/PINF - Peer Information Layer
 ///
@@ -184,13 +185,13 @@ pub trait ReadBytes {
 /// Protocol types that may be written to little endian bytes.
 pub trait WriteToBytes {
     /// Write the command to bytes.
-    fn write_to_bytes<W: WriteBytesExt>(&self, W) -> io::Result<()>;
+    fn write_to_bytes<W: WriteBytesExt>(&self, _: W) -> io::Result<()>;
 }
 
 /// Protocol types that may be read from little endian bytes.
 pub trait ReadFromBytes: Sized {
     /// Read the command from bytes.
-    fn read_from_bytes<R: ReadBytesExt>(R) -> io::Result<Self>;
+    fn read_from_bytes<R: ReadBytesExt>(_: R) -> io::Result<Self>;
 }
 
 /// Types that have a constant size when written to or read from bytes.
@@ -419,6 +420,10 @@ where
     Ok(vec)
 }
 
+impl Header {
+    pub const COOKIE: &'static [u8; 4] = b"CITP";
+}
+
 impl Kind {
     fn default() -> Self {
         return Kind { request_index: 0}
@@ -427,19 +432,42 @@ impl Kind {
 
 #[test]
 fn test_citp_header_read_bytes() {
-    let ploc_packet: [u8; 96] = [
-        0x43, 0x49, 0x54, 0x50, 0x01, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00,
-        0x00, 0x50, 0x49, 0x4e, 0x46, 0x50, 0x4c, 0x6f, 0x63, 0x4a, 0xfa, 0x56, 0x69, 0x73, 0x75,
-        0x61, 0x6c, 0x69, 0x7a, 0x65, 0x72, 0x00, 0x43, 0x61, 0x70, 0x74, 0x75, 0x72, 0x65, 0x20,
-        0x40, 0x20, 0x48, 0x75, 0x67, 0x6f, 0x73, 0x2d, 0x4d, 0x61, 0x63, 0x42, 0x6f, 0x6f, 0x6b,
-        0x2d, 0x50, 0x72, 0x6f, 0x2e, 0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x20, 0x28, 0x31, 0x39, 0x32,
-        0x2e, 0x31, 0x36, 0x38, 0x2e, 0x31, 0x36, 0x38, 0x2e, 0x38, 0x30, 0x29, 0x00, 0x52, 0x75,
-        0x6e, 0x6e, 0x69, 0x6e, 0x67, 0x00,
+    let ploc_packet: [u8; 20] = [
+        0x43, 0x49, 0x54, 0x50, 0x01, 0x00, 0x00, 0x00,
+        0x60, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+        0x50, 0x49, 0x4e, 0x46,
     ];
     let buffer = ploc_packet.to_vec();
 
     let citp_header: io::Result<Header> = buffer.as_slice().read_bytes::<Header>();
 
     assert!(citp_header.is_ok());
-    assert_eq!(citp_header.unwrap().cookie.to_le_bytes(), *b"CITP");
+    assert_eq!(citp_header.unwrap().cookie.to_le_bytes(), *Header::COOKIE);
+}
+
+#[test]
+fn test_citp_header_write_bytes() {
+    let citp_header = Header {
+        cookie: Header::COOKIE.as_slice().read_u32::<LittleEndian>().unwrap(),
+        version_major: 1,
+        version_minor: 0,
+        kind: Kind::default(),
+        message_size: 96,
+        message_part_count: 1,
+        message_part: 0,
+        content_type: b"PINF".as_slice().read_u32::<LittleEndian>().unwrap(),
+    };
+
+    let mut vec = vec!();
+    let result = vec.write_bytes(citp_header);
+
+ let expected: [u8; 20] = [
+        0x43, 0x49, 0x54, 0x50, 0x01, 0x00, 0x00, 0x00,
+        0x60, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+        0x50, 0x49, 0x4e, 0x46,
+ ];
+
+    assert!(result.is_ok());
+    assert_eq!(vec.as_slice(), expected);
+
 }
