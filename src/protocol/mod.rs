@@ -28,11 +28,11 @@
 //! - Read the header for the second layer.
 //! - Match on the `content_type` field of the second layer to determine what type to read.
 
+use std::{fmt, io, mem};
 use std::ffi::CString;
 use std::hash::{Hash, Hasher};
-use std::{fmt, io, mem};
 
-pub use byteorder::{ReadBytesExt, WriteBytesExt, LE};
+pub use byteorder::{LE, ReadBytesExt, WriteBytesExt};
 use byteorder::LittleEndian;
 
 /// ## CITP/PINF - Peer Information Layer
@@ -293,8 +293,8 @@ impl ReadFromBytes for Header {
 }
 
 impl<W> WriteBytes for W
-where
-    W: WriteBytesExt,
+    where
+        W: WriteBytesExt,
 {
     fn write_bytes<P: WriteToBytes>(&mut self, protocol: P) -> io::Result<()> {
         protocol.write_to_bytes(self)
@@ -302,8 +302,8 @@ where
 }
 
 impl<R> ReadBytes for R
-where
-    R: ReadBytesExt,
+    where
+        R: ReadBytesExt,
 {
     fn read_bytes<P: ReadFromBytes>(&mut self) -> io::Result<P> {
         P::read_from_bytes(self)
@@ -311,8 +311,8 @@ where
 }
 
 impl<'a, T> WriteToBytes for &'a T
-where
-    T: WriteToBytes,
+    where
+        T: WriteToBytes,
 {
     fn write_to_bytes<W: WriteBytesExt>(&self, writer: W) -> io::Result<()> {
         (**self).write_to_bytes(writer)
@@ -397,9 +397,9 @@ impl Hash for Kind {
 
 /// Read **len** elements of type **T** into the given **vec**.
 pub fn read_vec<R, T>(mut reader: R, mut len: usize, vec: &mut Vec<T>) -> io::Result<()>
-where
-    R: ReadBytesExt,
-    T: ReadFromBytes,
+    where
+        R: ReadBytesExt,
+        T: ReadFromBytes,
 {
     while len > 0 {
         let elem = reader.read_bytes()?;
@@ -411,9 +411,9 @@ where
 
 /// Read **len** elements of type **T** into a new **Vec**.
 pub fn read_new_vec<R, T>(reader: R, len: usize) -> io::Result<Vec<T>>
-where
-    R: ReadBytesExt,
-    T: ReadFromBytes,
+    where
+        R: ReadBytesExt,
+        T: ReadFromBytes,
 {
     let mut vec = Vec::with_capacity(len);
     read_vec(reader, len, &mut vec)?;
@@ -426,7 +426,7 @@ impl Header {
 
 impl Kind {
     fn default() -> Self {
-        return Kind { request_index: 0}
+        return Kind { request_index: 0 };
     }
 }
 
@@ -461,13 +461,12 @@ fn test_citp_header_write_bytes() {
     let mut vec = vec!();
     let result = vec.write_bytes(citp_header);
 
- let expected: [u8; 20] = [
+    let expected: [u8; 20] = [
         0x43, 0x49, 0x54, 0x50, 0x01, 0x00, 0x00, 0x00,
         0x60, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
         0x50, 0x49, 0x4e, 0x46,
- ];
+    ];
 
     assert!(result.is_ok());
     assert_eq!(vec.as_slice(), expected);
-
 }

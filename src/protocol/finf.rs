@@ -1,10 +1,11 @@
-use protocol::{
-    self, ReadBytes, ReadBytesExt, ReadFromBytes, SizeBytes, WriteBytes, WriteBytesExt,
-    WriteToBytes, LE,
-};
+use std::{io, mem};
 use std::borrow::Cow;
 use std::ffi::CString;
-use std::{io, mem};
+
+use protocol::{
+    self, LE, ReadBytes, ReadBytesExt, ReadFromBytes, SizeBytes, WriteBytes,
+    WriteBytesExt, WriteToBytes,
+};
 
 /// The FINF layer provides a standard, single, header used at the start of all FINF packets.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -73,8 +74,8 @@ impl WriteToBytes for Header {
 }
 
 impl<T> WriteToBytes for Message<T>
-where
-    T: WriteToBytes,
+    where
+        T: WriteToBytes,
 {
     fn write_to_bytes<W: WriteBytesExt>(&self, mut writer: W) -> io::Result<()> {
         writer.write_bytes(&self.finf_header)?;

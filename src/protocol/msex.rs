@@ -1,7 +1,8 @@
+use std::borrow::Cow;
+
 use protocol::{
     self
 };
-use std::borrow::Cow;
 
 /// The MSEX layer provides a standard, single, header used at the start of all MSEX packets.
 ///

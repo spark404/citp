@@ -1,8 +1,9 @@
-use protocol::{
-    self, ReadBytesExt, ReadFromBytes, SizeBytes, WriteBytes, WriteBytesExt, WriteToBytes, LE,
-};
-use std::borrow::Cow;
 use std::{io, mem};
+use std::borrow::Cow;
+
+use protocol::{
+    self, LE, ReadBytesExt, ReadFromBytes, SizeBytes, WriteBytes, WriteBytesExt, WriteToBytes,
+};
 
 /// The FSEL layer provides a standard, single, header used at the start of all FSEL packets.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -73,8 +74,8 @@ impl WriteToBytes for Header {
 }
 
 impl<T> WriteToBytes for Message<T>
-where
-    T: WriteToBytes,
+    where
+        T: WriteToBytes,
 {
     fn write_to_bytes<W: WriteBytesExt>(&self, mut writer: W) -> io::Result<()> {
         writer.write_bytes(&self.fsel_header)?;
